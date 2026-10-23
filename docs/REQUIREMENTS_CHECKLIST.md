@@ -15,6 +15,6 @@
 | 5 | LangGraph, any backend, relational DB, schema-only generation | ✅ | LangGraph + FastAPI + SQLite; schema introspected | all |
 | 6 | Workflow: intent → scope → schema → generate → validate → optimize → execute → explain → respond | ✅ | same node names, plus retry loops | `docs/workflow.mmd` (auto-generated, test-checked) |
 | 7 | Guardrails: SQL-only, no destructive, no hallucinated tables/columns, validate, handle ambiguity | ✅ | see README "Guardrails" | `test_validator.py`, `test_graph.py` |
-| 5 | LLM | ✅ | Google Gemini via `langchain-google-genai` (default `gemini-2.5-flash`, set by `LLM_MODEL`); provider is swappable | `test_llm_config.py` |
+| 5 | LLM | ✅ | Google Gemini via `langchain-google-genai` (default `gemini-3.5-flash-lite`, set by `LLM_MODEL`); provider is swappable | `test_llm_config.py` |
 | 8 | Deliverables: code, README, architecture diagram, workflow explanation, prompts, schema, demo video, deployed link | ⚠️ | code/README/diagrams/prompts/schema done. **Demo video and deployed URL still need to be produced by you**; placeholders are at the top of the README | n/a |
 | 10 | Bonus: execution, follow-ups, cost estimate, highlighting, multi-dialect, CSV, injection protection, Docker, tests | ✅ | all implemented | see README feature table |
