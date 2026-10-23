@@ -33,7 +33,7 @@ and refuses everything that is not SQL / database related.
 ## Architecture
 
 ```mermaid
-flowchart LR
+flowchart TD
   U["Browser UI<br/>chat · SQL · explanation · cost · results"] -- "POST /api/chat/stream (SSE)<br/>message, dialect, history" --> API[FastAPI]
   API --> G[LangGraph agent]
   G -- "structured output (JSON schema)" --> LLM[(LLM)]
