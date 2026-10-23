@@ -68,6 +68,13 @@ select{font:inherit;font-size:13px;padding:5px 8px;border-radius:8px;border:1px 
 .pill{font-size:11px;font-weight:700;text-transform:uppercase;padding:2px 9px;border-radius:99px;border:1px solid currentColor}
 .pill.low{color:var(--ok)}.pill.medium{color:var(--warn)}.pill.high{color:var(--err)}
 .ok{color:var(--ok)}
+.disclaimer{font-size:12px;color:var(--muted);text-align:center;padding:6px 12px;border-top:1px solid var(--border);background:var(--surface)}
+ul.checks{list-style:none;margin:4px 0 0;padding:0}
+ul.checks li{padding:2px 0;font-size:13px}
+ul.checks .y{color:var(--ok);font-weight:700}ul.checks .n{color:var(--err);font-weight:700}
+.caret::after{content:"▍";animation:blink 1s steps(1) infinite;color:var(--accent)}
+@keyframes blink{50%{opacity:0}}
+.aiwarn{font-size:12px;color:var(--muted);margin-top:8px}
 .empty-res{padding:14px;border:1px dashed var(--border);border-radius:8px;text-align:center}
 details.plan summary{cursor:pointer;margin-top:6px}
 .msg.answer{border-left:4px solid var(--ok)}
@@ -105,6 +112,7 @@ details.plan summary{cursor:pointer;margin-top:6px}
   </section>
   <section id="panel"></section>
 </main>
+<div class="disclaimer" role="note">⚠️ AI-generated SQL can be wrong or incomplete. Check the safety checks and results before using a query on real data. This demo is read-only and uses sample data.</div>
 <div id="toast"></div>
 <script>
 const $ = s => document.querySelector(s);
@@ -154,8 +162,8 @@ function bullets(text){
   const items = String(text||'').split('\n').map(x=>x.replace(/^\s*[-•*]\s*/,'').trim()).filter(Boolean);
   return items.length>1 ? `<ul class="plain">${items.map(i=>`<li>${esc(i)}</li>`).join('')}</ul>` : `<p style="margin:4px 0">${esc(items[0]||'')}</p>`;
 }
-function renderPanel(){
-  const p = $('#panel'), m = cur.messages[selected], r = m && m.response;
+function renderPanel(live){
+  const p = $('#panel'), m = cur.messages[selected], r = live || (m && m.response), streaming = !!live;
   if(!r){p.innerHTML='<div class="muted" style="margin:auto;text-align:center">The generated SQL, its explanation, cost estimate and the query results will appear here.</div>';return}
   if(r.type!=='sql'){
     p.innerHTML = `<div class="card"><h3>${esc(r.type)}</h3><div style="white-space:pre-wrap">${esc(r.message)}</div>${(r.details||[]).length?`<ul class="plain errtxt">${r.details.map(d=>`<li>${esc(d)}</li>`).join('')}</ul>`:''}</div>`;return;
@@ -164,7 +172,8 @@ function renderPanel(){
   let h = '';
   if(r.original_sql) h += `<div class="card"><div class="row"><h3>Your original query</h3></div><pre class="sql">${highlight(r.original_sql)}</pre></div>`;
   h += `<div class="card"><div class="row"><h3>${fixed} · ${esc(r.intent)} · ${esc(r.dialect||'')}</h3><button id="copy">Copy</button><button id="dlsql">Download</button></div><pre class="sql">${highlight(r.sql)}</pre></div>`;
-  h += `<div class="card"><h3>Explanation</h3><div>${esc(r.explanation)}</div>`;
+  if(r.checks?.length) h += `<div class="card"><h3>Safety checks</h3><ul class="checks">${r.checks.map(c=>`<li><span class="${c.ok?'y':'n'}">${c.ok?'✓':'✗'}</span> ${esc(c.label)}</li>`).join('')}</ul><div class="aiwarn">AI can make mistakes. These checks confirm the query is safe and valid, not that it answers your question the way you meant it.</div></div>`;
+  h += `<div class="card"><h3>Explanation</h3><div id="expl" class="${streaming&&!r.done?'caret':''}">${esc(r.explanation||'')}</div>`;
   if(r.notes) h += `<p style="margin:10px 0 0"><strong>${r.intent==='debug'?'What was wrong':'What changed'}</strong></p>${bullets(r.notes)}`;
   if(r.equivalent===true) h += `<p class="ok" style="margin:8px 0 0">✓ Verified: returns the same rows as your original query on the sample data.</p>`;
   h += `</div>`;
@@ -186,7 +195,8 @@ function renderPanel(){
     else h += `<div class="muted">${res.row_count} row(s)${res.truncated?' (truncated to 100)':''}${r.executed_as?' · executed on '+esc(r.executed_as):''}</div><div class="tablewrap"><table><thead><tr>${res.columns.map(c=>`<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${res.rows.map(row=>`<tr>${row.map(v=>`<td>${v===null?'<span class="muted">NULL</span>':esc(v)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
     h += `</div>`;
   }
-  p.innerHTML = h; p.scrollTop = 0;
+  const keep = p.scrollTop; p.innerHTML = h; p.scrollTop = streaming ? keep : 0;
+  if(!$('#copy')) return;
   $('#copy').onclick = () => navigator.clipboard.writeText(r.sql).then(()=>toast('SQL copied'),()=>toast('Copy failed'));
   $('#dlsql').onclick = () => download('query.sql', r.sql + '\n', 'text/plain');
   if($('#dlcsv')) $('#dlcsv').onclick = () => download('results.csv', toCSV(res), 'text/csv');
@@ -204,7 +214,7 @@ async function send(text){
   if(cur.title==='New chat') cur.title = text.slice(0,40);
   $('#input').value=''; $('#input').style.height='auto';
   renderChat(); renderConvs(); setBusy(true,'Starting…');
-  let final=null, gens=0, live='';
+  let final=null, gens=0, liveResp={type:'sql',explanation:''}, started=false;
   const history = cur.messages.slice(0,-1).slice(-6).map(m=>m.role==='user' ? {role:'user',text:m.text.slice(0,3900)} : {role:'assistant',text:(m.text||'').slice(0,3900),sql:(m.response?.sql||'').slice(0,3900)});
   try{
     const resp = await fetch('/api/chat/stream',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text,thread_id:cur.id,dialect:$('#dialect').value,history})});
@@ -220,7 +230,8 @@ async function send(text){
         if(!data) continue;
         const d = JSON.parse(data);
         if(ev==='step'){ if(d.node==='generate'&&++gens>1) setBusy(true,`Fixing SQL (attempt ${gens})`); else if(STEPS[d.node]) setBusy(true,STEPS[d.node]+'…'); }
-        else if(ev==='token'){ live += d.t; let el=$('#live'); if(!el){el=document.createElement('div');el.id='live';el.className='msg bot';$('#msgs').appendChild(el)} el.textContent=live; $('#msgs').scrollTop=1e9; }
+        else if(ev==='partial'){ if(d.sql) liveResp={type:'sql',explanation:''};  /* new attempt: drop stale cost/results */ Object.assign(liveResp,d); started=true; if(liveResp.sql) renderPanel(liveResp); }
+        else if(ev==='token'){ liveResp.explanation += d.t; started=true; const el=$('#expl'); if(el) el.textContent=liveResp.explanation; else if(liveResp.sql) renderPanel(liveResp); }
         else if(ev==='final') final = d;
       }
     }
