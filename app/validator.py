@@ -102,7 +102,43 @@ def validate_sql(sql: str, schema: Schema, dialect: str = "sqlite", strict_joins
     if join_problems and strict_joins:
         paths = "; ".join(sorted({f"{t}.{c} = {rt}.{rc}" for t, m in schema.items() for c, rt, rc in m["fks"]}))
         return ValidationResult(False, join_problems + [f"Valid join paths (foreign keys): {paths}"])
-    return ValidationResult(True, [], join_problems, root.sql(dialect=dialect, pretty=True))
+    warnings = join_problems + _check_literals(qualified, schema)
+    return ValidationResult(True, [], warnings, root.sql(dialect=dialect, pretty=True))
+
+def _check_literals(q: exp.Expression, schema: Schema) -> list[str]:
+    """Warn when a text literal is compared with a column whose full set of stored values is known and the literal
+    is not one of them (e.g. State = 'California' when the data uses 'CA'). Advisory only: it never blocks."""
+    out: list[str] = []
+    canon = {t.lower(): t for t in schema}
+    alias_to_table = {t.alias_or_name.lower(): t.name.lower() for t in q.find_all(exp.Table)}
+
+    def stored(col: exp.Column):
+        t = canon.get(alias_to_table.get(col.table.lower(), ""))
+        if not t:
+            return None, None
+        for c, s in schema[t].get("samples", {}).items():
+            if c.lower() == col.name.lower() and s.get("enum"):
+                return f"{t}.{c}", s["values"]
+        return None, None
+
+    for node in q.find_all(exp.EQ, exp.NEQ, exp.In):
+        col = node.this if isinstance(node.this, exp.Column) else None
+        if col is None:
+            continue
+        if isinstance(node, exp.In):
+            lits = [e.name for e in node.expressions if isinstance(e, exp.Literal) and e.is_string]
+        else:
+            r = node.expression
+            lits = [r.name] if isinstance(r, exp.Literal) and r.is_string else []
+        label, vals = stored(col)
+        if not label:
+            continue
+        known = {str(v).lower() for v in vals}
+        for lit in lits:
+            if lit.lower() not in known:
+                out.append(f"'{lit}' is not a stored value of {label} (stored values: "
+                           f"{', '.join(repr(v) for v in vals)}). The query may return no rows.")
+    return list(dict.fromkeys(out))
 
 
 def qualify_query(sql: str, schema: Schema, dialect: str = "sqlite") -> exp.Expression | None:
