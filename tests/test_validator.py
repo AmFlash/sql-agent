@@ -136,3 +136,11 @@ def test_index_ddl_validation():
 def test_index_signature_merges_duplicates():
     assert index_signature("CREATE INDEX a ON Customers(State);") == index_signature("create index b on customers ( state ) ;")
     assert index_signature("CREATE INDEX a ON Orders(Status, OrderDate DESC);") == ("orders", ("status", "orderdate"))
+
+
+def test_unknown_stored_value_warns_but_does_not_block():
+    r = validate_sql("SELECT * FROM Customers WHERE State = 'California'", SCHEMA)
+    assert r.ok and any("State" in w and "'CA'" in w for w in r.warnings)
+    assert not validate_sql("SELECT * FROM Customers WHERE State = 'CA'", SCHEMA).warnings
+    assert validate_sql("SELECT * FROM Customers c WHERE c.State IN ('CA', 'Texas')", SCHEMA).warnings
+    assert not validate_sql("SELECT * FROM Customers WHERE Name = 'anything'", SCHEMA).warnings   # free text: no check

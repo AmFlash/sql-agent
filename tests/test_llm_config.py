@@ -14,10 +14,21 @@ def _env(monkeypatch):
     monkeypatch.setenv("GOOGLE_API_KEY", "dummy-gemini-key")
 
 
-def test_default_is_gemini_with_zero_temperature_and_retries():
+def test_default_is_gemini_3_5_flash_lite_with_retries_and_provider_default_temperature():
     llm = get_llm()
     assert type(llm).__name__ == "ChatGoogleGenerativeAI"
-    assert llm.model.endswith("gemini-2.5-flash") and llm.temperature == 0 and llm.max_retries == 4
+    assert llm.model.endswith("gemini-3.5-flash-lite") and llm.max_retries == 4
+    assert llm.temperature in (None, 1.0)          # Gemini 3.x: provider default, not forced to 0
+
+
+def test_gemini_2_keeps_temperature_zero(monkeypatch):
+    monkeypatch.setenv("LLM_MODEL", "gemini-2.5-flash")
+    assert get_llm().temperature == 0
+
+
+def test_display_names_are_normalised_to_model_ids(monkeypatch):
+    monkeypatch.setenv("LLM_MODEL", "Gemini 3.5 Flash Lite")
+    assert get_llm().model.endswith("gemini-3.5-flash-lite")
 
 
 def test_model_is_configurable(monkeypatch):

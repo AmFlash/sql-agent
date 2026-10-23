@@ -39,6 +39,7 @@ def test_stream_emits_steps_then_final():
     assert "event: step" in body and "event: final" in body
     final = body.split("event: final\ndata: ")[1].split("\n")[0]
     assert json.loads(final)["type"] == "sql"
+    assert "event: partial" in body and body.index("event: partial") < body.index("event: token")
     assert "event: token" in body and '"t": "Expl"' in body      # explanation tokens are streamed
 
 
