@@ -1,0 +1,47 @@
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	detect_intent(detect_intent)
+	scope_validation(scope_validation)
+	refuse(refuse)
+	answer_help(answer_help)
+	load_schema(load_schema)
+	generate(generate)
+	clarify(clarify)
+	validate(validate)
+	fail(fail)
+	analyze(analyze)
+	execute(execute)
+	explain(explain)
+	respond(respond)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> detect_intent;
+	analyze -.-> execute;
+	analyze -.-> generate;
+	detect_intent --> scope_validation;
+	execute -.-> explain;
+	execute -.-> generate;
+	explain --> respond;
+	generate -.-> clarify;
+	generate -.-> validate;
+	load_schema --> generate;
+	scope_validation -.-> answer_help;
+	scope_validation -.-> clarify;
+	scope_validation -.-> load_schema;
+	scope_validation -.-> refuse;
+	validate -.-> analyze;
+	validate -.-> fail;
+	validate -.-> generate;
+	validate -.-> refuse;
+	answer_help --> __end__;
+	clarify --> __end__;
+	fail --> __end__;
+	refuse --> __end__;
+	respond --> __end__;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc

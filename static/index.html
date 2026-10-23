@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SQL Query AI Agent</title>
+<style>
+:root{--bg:#f6f7f9;--surface:#fff;--border:#e2e5ea;--text:#1c2330;--muted:#6b7686;--accent:#4f46e5;--accent-fg:#fff;
+--user:#4f46e5;--code-bg:#f1f3f7;--kw:#7c3aed;--str:#047857;--num:#b45309;--com:#8a94a3;--err:#b91c1c;--warn:#b45309;--ok:#047857}
+:root[data-theme=dark]{--bg:#0f131a;--surface:#171c26;--border:#2a3240;--text:#e6e9ef;--muted:#8d98a8;--accent:#818cf8;--accent-fg:#0f131a;
+--user:#4f46e5;--code-bg:#0f131a;--kw:#c4b5fd;--str:#6ee7b7;--num:#fcd34d;--com:#6b7686;--err:#f87171;--warn:#fbbf24;--ok:#6ee7b7}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column}
+header{display:flex;align-items:center;gap:12px;padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--border)}
+header h1{font-size:16px;margin:0;flex:1}
+.badge{font-size:12px;padding:2px 8px;border-radius:99px;background:var(--code-bg);color:var(--muted);border:1px solid var(--border)}
+button{font:inherit;cursor:pointer;border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:8px;padding:6px 12px}
+button:hover{border-color:var(--accent)}
+button.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+button:disabled{opacity:.5;cursor:not-allowed}
+.icon{padding:6px 10px}
+#menu{display:none}
+main{flex:1;min-height:0;display:grid;grid-template-columns:250px minmax(0,1fr) minmax(0,1fr);gap:12px;padding:12px}
+aside,section{background:var(--surface);border:1px solid var(--border);border-radius:12px;min-height:0;display:flex;flex-direction:column}
+aside{padding:12px;overflow:auto;gap:10px}
+aside h2,.card h3{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:6px 0}
+.conv{display:flex;gap:6px;align-items:center;padding:7px 9px;border-radius:8px;cursor:pointer;font-size:14px}
+.conv span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.conv:hover,.conv.active{background:var(--code-bg)}
+.conv .x{color:var(--muted);border:0;background:none;padding:0 4px}
+details.tbl{font-size:13px}
+details.tbl summary{cursor:pointer;font-weight:600;padding:2px 0}
+details.tbl div{color:var(--muted);padding-left:12px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
+#chat{overflow:hidden}
+#msgs{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
+.msg{max-width:88%;padding:9px 13px;border-radius:14px;white-space:pre-wrap;word-wrap:break-word}
+.msg.user{align-self:flex-end;background:var(--user);color:#fff;border-bottom-right-radius:4px}
+.msg.bot{align-self:flex-start;background:var(--code-bg);border:1px solid var(--border);border-bottom-left-radius:4px;cursor:pointer}
+.msg.bot.sel{border-color:var(--accent)}
+.msg.refusal{border-left:4px solid var(--warn)}.msg.error{border-left:4px solid var(--err)}.msg.clarification{border-left:4px solid var(--accent)}
+.msg .tag{display:block;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);margin-bottom:2px}
+.typing{align-self:flex-start;color:var(--muted);font-size:14px;display:flex;align-items:center;gap:8px}
+.spin{width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:s .7s linear infinite}
+@keyframes s{to{transform:rotate(360deg)}}
+.empty{margin:auto;text-align:center;color:var(--muted);max-width:420px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:12px}
+.chips button{font-size:13px;border-radius:99px}
+form{display:flex;gap:8px;padding:12px;border-top:1px solid var(--border)}
+textarea{flex:1;resize:none;font:inherit;padding:9px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text);max-height:140px}
+textarea:focus{outline:2px solid var(--accent);outline-offset:-1px}
+#panel{overflow:auto;padding:12px;gap:12px}
+.card{border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+.card .row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.card .row h3{flex:1;margin:0}
+.card .row button{font-size:12px;padding:3px 9px}
+pre.sql.wrap{white-space:pre-wrap;word-break:break-word}
+pre.sql{margin:0;padding:12px;background:var(--code-bg);border-radius:8px;overflow:auto;font:13px/1.55 ui-monospace,Menlo,Consolas,monospace}
+.kw{color:var(--kw);font-weight:600}.st{color:var(--str)}.nm{color:var(--num)}.cm{color:var(--com)}
+ul.plain{margin:4px 0;padding-left:18px}
+.warn{color:var(--warn)}.errtxt{color:var(--err)}
+.tablewrap{overflow:auto;max-height:300px;border:1px solid var(--border);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:5px 10px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap}
+th{position:sticky;top:0;background:var(--surface)}
+.muted{color:var(--muted);font-size:13px}
+select{font:inherit;font-size:13px;padding:5px 8px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text)}
+.pill{font-size:11px;font-weight:700;text-transform:uppercase;padding:2px 9px;border-radius:99px;border:1px solid currentColor}
+.pill.low{color:var(--ok)}.pill.medium{color:var(--warn)}.pill.high{color:var(--err)}
+.ok{color:var(--ok)}
+.empty-res{padding:14px;border:1px dashed var(--border);border-radius:8px;text-align:center}
+details.plan summary{cursor:pointer;margin-top:6px}
+.msg.answer{border-left:4px solid var(--ok)}
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:7px 14px;border-radius:8px;opacity:0;transition:opacity .2s;pointer-events:none}
+#toast.show{opacity:1}
+@media(max-width:1000px){
+ main{grid-template-columns:minmax(0,1fr);overflow:auto;display:flex;flex-direction:column}
+ #chat{height:75vh;flex:none}#panel{flex:none}
+ aside{position:fixed;left:0;top:0;bottom:0;width:280px;z-index:10;transform:translateX(-105%);transition:transform .2s;border-radius:0}
+ aside.open{transform:none}#menu{display:inline-block}
+}
+</style>
+</head>
+<body>
+<header>
+  <button id="menu" class="icon" aria-label="Menu">☰</button>
+  <h1>SQL Query AI Agent</h1>
+  <label class="muted" for="dialect">Dialect</label>
+  <select id="dialect" aria-label="SQL dialect"><option value="sqlite">SQLite</option><option value="postgresql">PostgreSQL</option><option value="mysql">MySQL</option></select>
+  <span class="badge">read-only</span>
+  <button id="theme" class="icon" aria-label="Toggle dark mode">◐</button>
+</header>
+<main>
+  <aside id="side">
+    <button class="primary" id="new">+ New chat</button>
+    <h2>History</h2><div id="convs"></div>
+    <h2>Database schema</h2><div id="schema" class="muted">Loading…</div>
+  </aside>
+  <section id="chat">
+    <div id="msgs"></div>
+    <form id="form">
+      <textarea id="input" rows="1" maxlength="2000" placeholder="Ask about the data, or paste SQL to explain, optimize or debug…"></textarea>
+      <button class="primary" id="send">Send</button>
+    </form>
+  </section>
+  <section id="panel"></section>
+</main>
+<div id="toast"></div>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const KW = new Set('select from where group by order having limit offset join left right inner outer full cross on using as and or not in is null like between exists distinct union all except intersect case when then else end with asc desc count sum avg min max over partition cast'.split(' '));
+const STEPS = {detect_intent:'Understanding your request',scope_validation:'Checking scope',load_schema:'Reading schema',generate:'Writing SQL',validate:'Validating SQL',analyze:'Analyzing performance',execute:'Running query',explain:'Explaining',answer_help:'Answering'};
+const EXAMPLES = ['Show all employees hired after January 2024','Top 5 customers by total order value','Show all customers','Which products have never been ordered?','Optimize: SELECT * FROM Customers WHERE State = \'CA\'','What is a foreign key?'];
+
+function highlight(sql){
+  return sql.replace(/('(?:[^']|'')*')|(--[^\n]*)|(\b\d+(?:\.\d+)?\b)|([A-Za-z_][A-Za-z0-9_]*)|([\s\S])/g,
+    (m,str,com,num,word)=> str?`<span class="st">${esc(m)}</span>` : com?`<span class="cm">${esc(m)}</span>` :
+      num?`<span class="nm">${esc(m)}</span>` : word&&KW.has(word.toLowerCase())?`<span class="kw">${esc(m)}</span>` : esc(m));
+}
+function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('show');setTimeout(()=>e.classList.remove('show'),1500)}
+function download(name,text,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;a.click();URL.revokeObjectURL(a.href)}
+function toCSV(r){const q=v=>{v=v===null?'':String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};return [r.columns,...r.rows].map(x=>x.map(q).join(',')).join('\n')}
+
+// ---------- state ----------
+const store = {get(){try{return JSON.parse(localStorage.getItem('convs')||'[]')}catch{return[]}},set(v){try{localStorage.setItem('convs',JSON.stringify(v))}catch{}}};
+let convs = store.get(), cur = null, selected = null, busy = false;
+const newId = () => (crypto.randomUUID ? crypto.randomUUID() : 'c' + Date.now() + Math.random().toString(36).slice(2));
+function newConv(){cur={id:newId(),title:'New chat',messages:[]};convs.unshift(cur);selected=null;save();render()}
+function save(){store.set(convs.slice(0,30))}
+
+// ---------- rendering ----------
+function render(){renderConvs();renderChat();renderPanel()}
+function renderConvs(){
+  $('#convs').innerHTML = convs.map(c=>`<div class="conv ${c.id===cur.id?'active':''}" data-id="${c.id}"><span>${esc(c.title)}</span><button class="x" data-del="${c.id}" aria-label="Delete">✕</button></div>`).join('');
+}
+function renderChat(){
+  const box = $('#msgs');
+  if(!cur.messages.length){
+    box.innerHTML = `<div class="empty"><h2 style="color:var(--text);margin:0 0 6px">Ask your database anything</h2>
+      I turn plain English into validated, read-only SQL, and can explain, optimize or debug queries you paste in.
+      <div class="chips">${EXAMPLES.map(e=>`<button data-ex="${esc(e)}">${esc(e)}</button>`).join('')}</div></div>`;
+    return;
+  }
+  box.innerHTML = cur.messages.map((m,i)=>{
+    if(m.role==='user') return `<div class="msg user">${esc(m.text)}</div>`;
+    const t = m.response?.type || 'sql';
+    const tag = {refusal:'Out of scope',error:'Error',clarification:'Question',answer:'Answer'}[t];
+    return `<div class="msg bot ${t} ${selected===i?'sel':''}" data-i="${i}">${tag?`<span class="tag">${tag}</span>`:''}${esc(m.text)}</div>`;
+  }).join('');
+  box.scrollTop = box.scrollHeight;
+}
+function bullets(text){
+  const items = String(text||'').split('\n').map(x=>x.replace(/^\s*[-•*]\s*/,'').trim()).filter(Boolean);
+  return items.length>1 ? `<ul class="plain">${items.map(i=>`<li>${esc(i)}</li>`).join('')}</ul>` : `<p style="margin:4px 0">${esc(items[0]||'')}</p>`;
+}
+function renderPanel(){
+  const p = $('#panel'), m = cur.messages[selected], r = m && m.response;
+  if(!r){p.innerHTML='<div class="muted" style="margin:auto;text-align:center">The generated SQL, its explanation, cost estimate and the query results will appear here.</div>';return}
+  if(r.type!=='sql'){
+    p.innerHTML = `<div class="card"><h3>${esc(r.type)}</h3><div style="white-space:pre-wrap">${esc(r.message)}</div>${(r.details||[]).length?`<ul class="plain errtxt">${r.details.map(d=>`<li>${esc(d)}</li>`).join('')}</ul>`:''}</div>`;return;
+  }
+  const fixed = r.intent==='debug' ? 'Corrected SQL' : r.intent==='optimize' ? 'Optimized SQL' : 'SQL';
+  let h = '';
+  if(r.original_sql) h += `<div class="card"><div class="row"><h3>Your original query</h3></div><pre class="sql">${highlight(r.original_sql)}</pre></div>`;
+  h += `<div class="card"><div class="row"><h3>${fixed} · ${esc(r.intent)} · ${esc(r.dialect||'')}</h3><button id="copy">Copy</button><button id="dlsql">Download</button></div><pre class="sql">${highlight(r.sql)}</pre></div>`;
+  h += `<div class="card"><h3>Explanation</h3><div>${esc(r.explanation)}</div>`;
+  if(r.notes) h += `<p style="margin:10px 0 0"><strong>${r.intent==='debug'?'What was wrong':'What changed'}</strong></p>${bullets(r.notes)}`;
+  if(r.equivalent===true) h += `<p class="ok" style="margin:8px 0 0">✓ Verified: returns the same rows as your original query on the sample data.</p>`;
+  h += `</div>`;
+  if(r.tips?.length || r.suggested_indexes?.length){
+    h += `<div class="card"><h3>Optimization</h3>`;
+    if(r.tips?.length) h += `<ul class="plain">${r.tips.map(t=>`<li>${esc(t)}</li>`).join('')}</ul>`;
+    if(r.suggested_indexes?.length) h += `<p style="margin:8px 0 4px"><strong>Suggested indexes</strong> <span class="muted">(advice only, never executed)</span></p><pre class="sql wrap">${r.suggested_indexes.map(highlight).join('\n')}</pre>`;
+    h += `</div>`;
+  }
+  if(r.cost){
+    h += `<div class="card"><div class="row"><h3>Estimated cost</h3><span class="pill ${esc(r.cost.level)}">${esc(r.cost.level)}</span></div><div>${esc(r.cost.summary)}</div>${r.cost.plan?.length?`<details class="plan"><summary class="muted">Query plan</summary><pre class="sql wrap">${r.cost.plan.map(esc).join('\n')}</pre></details>`:''}</div>`;
+  }
+  if(r.warnings?.length) h += `<div class="card"><h3>Warnings</h3><ul class="plain warn">${r.warnings.map(w=>`<li>${esc(w)}</li>`).join('')}</ul></div>`;
+  const res = r.results;
+  if(res){
+    h += `<div class="card"><div class="row"><h3>Results</h3>${res.error||!res.row_count?'':'<button id="dlcsv">Download CSV</button>'}</div>`;
+    if(res.error) h += `<div class="errtxt">${esc(res.error)}</div>`;
+    else if(!res.row_count) h += `<div class="empty-res"><strong>No rows returned.</strong><br><span class="muted">The query ran successfully, but nothing in the sample data matches it.</span></div>`;
+    else h += `<div class="muted">${res.row_count} row(s)${res.truncated?' (truncated to 100)':''}${r.executed_as?' · executed on '+esc(r.executed_as):''}</div><div class="tablewrap"><table><thead><tr>${res.columns.map(c=>`<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${res.rows.map(row=>`<tr>${row.map(v=>`<td>${v===null?'<span class="muted">NULL</span>':esc(v)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+    h += `</div>`;
+  }
+  p.innerHTML = h; p.scrollTop = 0;
+  $('#copy').onclick = () => navigator.clipboard.writeText(r.sql).then(()=>toast('SQL copied'),()=>toast('Copy failed'));
+  $('#dlsql').onclick = () => download('query.sql', r.sql + '\n', 'text/plain');
+  if($('#dlcsv')) $('#dlcsv').onclick = () => download('results.csv', toCSV(res), 'text/csv');
+}
+
+// ---------- sending ----------
+function setBusy(b,label){
+  busy=b;$('#send').disabled=b;
+  const old=$('#typing');if(old)old.remove();
+  if(b){const d=document.createElement('div');d.className='typing';d.id='typing';d.innerHTML=`<div class="spin"></div><span>${esc(label||'Thinking…')}</span>`;$('#msgs').appendChild(d);$('#msgs').scrollTop=1e9}
+}
+async function send(text){
+  text = text.trim(); if(!text||busy) return;
+  cur.messages.push({role:'user',text});
+  if(cur.title==='New chat') cur.title = text.slice(0,40);
+  $('#input').value=''; $('#input').style.height='auto';
+  renderChat(); renderConvs(); setBusy(true,'Starting…');
+  let final=null, gens=0, live='';
+  const history = cur.messages.slice(0,-1).slice(-6).map(m=>m.role==='user' ? {role:'user',text:m.text.slice(0,3900)} : {role:'assistant',text:(m.text||'').slice(0,3900),sql:(m.response?.sql||'').slice(0,3900)});
+  try{
+    const resp = await fetch('/api/chat/stream',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text,thread_id:cur.id,dialect:$('#dialect').value,history})});
+    if(resp.status===429) throw new Error('Rate limit reached. Please try again later.');
+    if(!resp.ok) throw new Error('Request failed ('+resp.status+').');
+    const reader = resp.body.getReader(), dec = new TextDecoder(); let buf='';
+    while(true){
+      const {value,done} = await reader.read(); if(done) break;
+      buf += dec.decode(value,{stream:true});
+      let i; while((i=buf.indexOf('\n\n'))>=0){
+        const raw = buf.slice(0,i); buf = buf.slice(i+2);
+        const ev = (raw.match(/^event: (.*)$/m)||[])[1], data = (raw.match(/^data: (.*)$/m)||[])[1];
+        if(!data) continue;
+        const d = JSON.parse(data);
+        if(ev==='step'){ if(d.node==='generate'&&++gens>1) setBusy(true,`Fixing SQL (attempt ${gens})`); else if(STEPS[d.node]) setBusy(true,STEPS[d.node]+'…'); }
+        else if(ev==='token'){ live += d.t; let el=$('#live'); if(!el){el=document.createElement('div');el.id='live';el.className='msg bot';$('#msgs').appendChild(el)} el.textContent=live; $('#msgs').scrollTop=1e9; }
+        else if(ev==='final') final = d;
+      }
+    }
+    if(!final) throw new Error('No response received.');
+  }catch(e){ final = {type:'error',message:e.message||'Network error.'} }
+  const rc = final.results && !final.results.error ? final.results.row_count : null;
+  const first = (final.explanation||'').split(/(?<=[.!?])\s/)[0];
+  const textOut = final.type==='sql' ? `${first}${rc===null?'':rc===0?'\n\nNo rows matched.':`\n\n${rc} row${rc===1?'':'s'} returned.`}\nSQL, full explanation, cost and results are in the panel →` : final.message;
+  cur.messages.push({role:'assistant',text:textOut,response:final});
+  selected = cur.messages.length-1;
+  setBusy(false); save(); render();
+}
+
+// ---------- wiring ----------
+$('#form').onsubmit = e => {e.preventDefault(); send($('#input').value)};
+$('#input').onkeydown = e => {if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send($('#input').value)}};
+$('#input').oninput = e => {e.target.style.height='auto';e.target.style.height=e.target.scrollHeight+'px'};
+$('#new').onclick = () => {newConv();$('#side').classList.remove('open')};
+$('#menu').onclick = () => $('#side').classList.toggle('open');
+$('#convs').onclick = e => {
+  const del = e.target.closest('[data-del]');
+  if(del){convs=convs.filter(c=>c.id!==del.dataset.del);if(!convs.length)return newConv();if(cur.id===del.dataset.del)cur=convs[0];save();selected=null;return render()}
+  const c = e.target.closest('[data-id]'); if(!c) return;
+  cur = convs.find(x=>x.id===c.dataset.id); selected=null;
+  for(let i=cur.messages.length-1;i>=0;i--) if(cur.messages[i].response){selected=i;break}
+  $('#side').classList.remove('open'); render();
+};
+$('#msgs').onclick = e => {
+  const ex = e.target.closest('[data-ex]'); if(ex) return send(ex.dataset.ex);
+  const m = e.target.closest('[data-i]'); if(m){selected=+m.dataset.i;renderChat();renderPanel()}
+};
+try{const d=localStorage.getItem('dialect'); if(d) $('#dialect').value=d}catch{}
+$('#dialect').onchange = e => {try{localStorage.setItem('dialect',e.target.value)}catch{}; toast('Dialect: '+e.target.selectedOptions[0].text)};
+function applyTheme(t){document.documentElement.dataset.theme=t;try{localStorage.setItem('theme',t)}catch{}}
+$('#theme').onclick = () => applyTheme(document.documentElement.dataset.theme==='dark'?'light':'dark');
+let saved=null;try{saved=localStorage.getItem('theme')}catch{}
+applyTheme(saved || (matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'));
+
+fetch('/api/schema').then(r=>r.json()).then(s=>{
+  $('#schema').innerHTML = Object.entries(s).map(([t,m])=>`<details class="tbl"><summary>${esc(t)}</summary>${m.columns.map(c=>`<div>${esc(c.name)} <span style="opacity:.6">${esc(c.type)}</span>${m.pk.includes(c.name)?' 🔑':''}</div>`).join('')}</details>`).join('');
+}).catch(()=>{$('#schema').textContent='Could not load schema.'});
+
+if(!convs.length) newConv(); else {cur=convs[0];for(let i=cur.messages.length-1;i>=0;i--) if(cur.messages[i].response){selected=i;break} render()}
+</script>
+</body>
+</html>

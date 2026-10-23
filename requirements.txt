@@ -1,0 +1,12 @@
+langgraph>=0.4
+langchain>=0.3
+langchain-google-genai>=2.1
+sqlglot>=25.0
+pydantic>=2.0
+python-dotenv>=1.0
+fastapi>=0.110
+uvicorn>=0.29
+# optional alternative providers: pip install langchain-anthropic / langchain-openai
+# dev
+pytest>=8.0
+httpx>=0.27
