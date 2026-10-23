@@ -49,62 +49,52 @@ flowchart LR
 ## LangGraph workflow
 
 The graph follows the workflow in the brief (intent → scope → schema → generate → validate → optimize →
-execute → explain → respond) and adds self-correction loops. An auto-generated copy lives in
-[`docs/workflow.mmd`](docs/workflow.mmd) (a test fails if it drifts from the code).
+execute → explain → respond) and adds self-correction loops. Each block lists what that node does. An
+auto-generated copy of the raw graph lives in [`docs/workflow.mmd`](docs/workflow.mmd) (a test fails if it drifts
+from the code).
 
 ```mermaid
-flowchart TD
-  A([User request]) --> B["detect_intent<br/>injection + destructive checks, then LLM classifier"]
-  B --> C[scope_validation]
-  C -- "out-of-scope / destructive / injection" --> R[refuse]
-  C -- "needs SQL but none pasted" --> Q[clarify]
-  C -- "conceptual SQL question" --> H[answer_help]
-  C -- "generate / explain / optimize / debug" --> D["load_schema<br/>+ validator report on pasted SQL"]
-  D --> E[generate]
+flowchart LR
+  U(["User"]) --> B{"<b>1 · Intent Classifier</b><br/><i>detect_intent</i><br/>NFKC normalise<br/>destructive check (SQL + English)<br/>prompt-injection check<br/>LLM: generate · explain · optimize<br/>debug · sql_help · out_of_scope"}
+  B -- "Yes" --> C["<b>2 · Scope Gate</b><br/><i>scope_validation</i><br/>routes the request into<br/>the SQL pipeline<br/>or to a side exit"]
+  C -- "SQL task" --> D["<b>3 · Schema Retriever</b><br/><i>load_schema</i><br/>tables · columns · PK / FK<br/>row counts · enum values · date ranges<br/>validator report on pasted SQL<br/>broken SQL is switched to debug"]
+  D --> E["<b>4 · SQL Generator</b><br/><i>generate</i><br/>modes: generate · explain · optimize · debug<br/>gets schema, today, dialect,<br/>last 6 messages, previous SQL<br/>retry also gets failed SQL + error"]
+  E --> F{"<b>5 · SQL Validator</b><br/><i>validate</i><br/>sqlglot AST · one statement<br/>read-only only<br/>tables + columns exist<br/>joins follow foreign keys"}
+  F -- "Yes" --> G["<b>6 · Optimizer</b><br/><i>analyze</i><br/>EXPLAIN QUERY PLAN cost<br/>index advice from predicates<br/>lint tips<br/>original vs rewrite row check"]
+  G --> H["<b>7 · Query Executor</b><br/><i>execute</i><br/>read-only run on sample DB<br/>PostgreSQL / MySQL transpiled<br/>to SQLite preview"]
+  H -- "Yes" --> I["<b>8 · Explainer</b><br/><i>explain</i><br/>plain-English summary<br/>token-streamed"]
+  I --> K["<b>9 · Response Generator</b><br/><i>respond</i><br/>SQL · explanation · cost · indexes<br/>results · safety checks<br/>saves last_sql to memory"]
+  K --> Z(["Exit"])
+
+  B -- "No: destructive / injection / off-topic" --> R["<i>refuse</i><br/>polite refusal"]
+  C -- "conceptual SQL question" --> HP["<i>answer_help</i><br/>explains the concept"]
+  C -- "no SQL pasted" --> Q["<i>clarify</i><br/>asks one question"]
   E -- "request ambiguous" --> Q
-  E --> F["validate<br/>sqlglot"]
   F -- "not read-only" --> R
-  F -- "errors, attempts < 3" --> E
-  F -- "errors, attempts = 3" --> X[fail]
-  F -- ok --> G["analyze<br/>cost · indexes · tips · equivalence"]
-  G -- "rewrite changed the results" --> E
-  G --> I["execute<br/>read-only"]
-  I -- "runtime error" --> E
-  I --> J["explain<br/>token-streamed"] --> K[respond]
-  R --> Z([END])
+  F -- "No: errors, attempts under 3" --> E
+  F -- "No: errors, attempt 3" --> X["<i>fail</i><br/>explains what went wrong"]
+  G -- "No: rewrite changed results" --> E
+  H -- "No: runtime error" --> E
+  R --> Z
+  HP --> Z
   Q --> Z
-  H --> Z
   X --> Z
-  K --> Z
+
+  classDef gate fill:#fff7e6,stroke:#d48806,color:#000;
+  classDef step fill:#e6f4ff,stroke:#1677ff,color:#000;
+  classDef side fill:#f5f5f5,stroke:#8c8c8c,color:#000;
+  class B,F gate;
+  class C,D,E,G,H,I,K step;
+  class R,HP,Q,X side;
 ```
-
-**Node responsibilities**
-
-1. **detect_intent**: Unicode-normalises the text, then runs cheap code checks (prompt-injection phrases,
-   destructive requests in SQL *or* plain English such as "delete all employees"), and only then an LLM
-   classifier: `generate | explain | optimize | debug | sql_help | destructive | out_of_scope`.
-2. **scope_validation**: the gate into the SQL pipeline. Refusals go to `refuse`; "optimize/explain/debug"
-   without any SQL pasted goes to `clarify`; conceptual questions go to `answer_help`.
-3. **load_schema**: schema text (tables, columns, PKs, FKs, row counts, enum values, date ranges) read from the live
-   database. For pasted SQL it also runs the validator and hands the report to the model as ground truth. A broken
-   query sent to "explain"/"optimize" is automatically switched to "debug".
-4. **generate**: one node, four task modes. Receives the schema, today's date, the dialect, the last 6 messages and
-   the previous SQL, so follow-ups *modify* the prior query. On retries it also receives the failed SQL and the
-   exact error. May return a `clarification` question instead of SQL for vague requests.
-5. **validate**: the hard guardrail (see below). Failure loops back to `generate` (max 3 attempts). A
-   non-read-only statement is never retried: it goes straight to a polite refusal.
-6. **analyze** (the brief's *SQL Optimization* step): `EXPLAIN QUERY PLAN` cost estimate, index advice derived from
-   the query's own predicates, deterministic lint tips, and LLM-suggested indexes checked against the real schema
-   (hallucinated ones are dropped). In optimize mode it also **runs the original and the rewrite and compares the
-   rows**; if they differ the model is sent back to fix it.
-7. **execute**: read-only run on the sample DB. A runtime error is fed back to `generate` for self-correction.
-   PostgreSQL / MySQL queries are transpiled to SQLite for a clearly labelled preview.
-8. **explain → respond**: plain-English summary (streamed); response and `last_sql` saved to state.
 
 **Memory:** `MemorySaver` keyed by `thread_id` (one per chat in the UI). `last_sql` persists between turns; per-turn
 fields are reset in `detect_intent`. Because memory lives in process, the browser also sends its last few turns; if the
 server has no state for that thread (restart / free-tier sleep) it replays them, and re-validates any replayed SQL
 before trusting it.
+
+**Retries:** a validation or runtime error loops back to `generate` with the exact error (max 3 attempts). A
+non-read-only statement is never retried: it goes straight to a polite refusal.
 
 ## Guardrails (defence in depth)
 
