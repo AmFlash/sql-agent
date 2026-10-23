@@ -4,7 +4,7 @@ A task-focused AI agent that turns natural language into **validated, read-only 
 plain English, estimates its cost, optimizes and debugs SQL you paste in, remembers conversation context,
 and refuses everything that is not SQL / database related.
 
-- **Live demo:** `https://sql-query-agent-uo0t.onrender.com` (no login needed; the sample database is pre-loaded)
+- **Live demo:** `[https://sql-query-agent-uo0t.onrender.com](https://sql-query-agent-uo0t.onrender.com)` (no login needed; the sample database is pre-loaded)
 - **Demo video:** `<PASTE VIDEO LINK HERE>`
 - **Stack:** LangGraph · FastAPI · SQLite · sqlglot · vanilla-JS frontend (no build step) · Docker
 
