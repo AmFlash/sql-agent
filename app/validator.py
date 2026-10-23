@@ -105,6 +105,7 @@ def validate_sql(sql: str, schema: Schema, dialect: str = "sqlite", strict_joins
     warnings = join_problems + _check_literals(qualified, schema)
     return ValidationResult(True, [], warnings, root.sql(dialect=dialect, pretty=True))
 
+
 def _check_literals(q: exp.Expression, schema: Schema) -> list[str]:
     """Warn when a text literal is compared with a column whose full set of stored values is known and the literal
     is not one of them (e.g. State = 'California' when the data uses 'CA'). Advisory only: it never blocks."""

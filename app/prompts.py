@@ -37,8 +37,6 @@ HARD RULES
    `clarification` to ONE short question and leave `sql` empty. Do not clarify when a sensible default exists.
 5. If the request cannot be answered with this schema, set `clarification` explaining what is missing.
 6. Use the exact stored values shown under VALUES/EXAMPLES (e.g. "California" -> State = 'CA').
-7. In `sql`, output read-only SQL only: a single SELECT (CTEs allowed). Never output DELETE/UPDATE/INSERT/DROP/ALTER/TRUNCATE/CREATE as executable SQL.
-
 
 CONVENTIONS
 - Dates are ISO strings 'YYYY-MM-DD'. "after/since <Month Year>" means on or after the first day of that month

@@ -131,7 +131,8 @@ def _sse(event: str, data: dict) -> str:
 
 @app.post("/api/chat/stream")
 def chat_stream(req: ChatRequest, request: Request):
-    """Server-sent events: `step` per graph node, `token` per streamed explanation token, then `final`."""
+    """Server-sent events: `step` per graph node, `partial` as soon as SQL / cost / results are ready,
+    `token` per streamed explanation token, then `final`."""
     check_rate(request)
     graph = get_graph()
 
@@ -143,6 +144,8 @@ def chat_stream(req: ChatRequest, request: Request):
                 if mode == "custom":
                     if isinstance(chunk, dict) and "token" in chunk:
                         yield _sse("token", {"t": chunk["token"]})
+                    elif isinstance(chunk, dict) and "partial" in chunk:
+                        yield _sse("partial", chunk["partial"])
                     continue
                 for node, update in chunk.items():
                     yield _sse("step", {"node": node})
