@@ -1,3 +1,4 @@
+
 # SQL Query AI Agent
 
 A task-focused AI agent that turns natural language into **validated, read-only SQL**, explains it in
@@ -5,9 +6,64 @@ plain English, estimates its cost, optimizes and debugs SQL you paste in, rememb
 and refuses everything that is not SQL / database related.
 
 - **Live demo:** [https://sql-query-agent-uo0t.onrender.com](https://sql-query-agent-uo0t.onrender.com)(no login needed; the sample database is pre-loaded)
-- **Demo video:** `<PASTE VIDEO LINK HERE>`
+- **Demo video:** https://youtu.be/YOUR_VIDEO_ID
+- **GitHub:** https://github.com/AmFlash/sql-agent
 - **Stack:** LangGraph · FastAPI · SQLite · sqlglot · vanilla-JS frontend (no build step) · Docker
 
+## Accessing the deployed app
+
+- **URL:** https://sql-query-agent-uo0t.onrender.com
+- **Login:** none required, the app is public.
+- **Sample data:** a SQLite database (Departments, Employees, Customers, Products, Orders, OrderItems) is created and preloaded when the Docker image builds. No setup is needed.
+- **First load may be slow:** the app runs on Render's free tier, which sleeps after about 15 minutes idle. The first request can take 30–60 seconds. Please wait and refresh once.
+- **Rate limit:** 60 requests per hour per IP, to protect the free LLM quota. If you see a "rate-limited" message, wait a few seconds and retry.
+- **Try these:**
+  - `Which products have never been ordered?`
+  - `Top 5 products by total quantity sold`
+  - `List all customers from California`, then follow up with `Sort them by name`
+  - `Fix this query: SELECT Nme FROM Customers`
+  - `Delete all customers` (shows the refusal guardrail)
+
+## Architecture & Workflow
+
+Each box shows one LangGraph node and what it does. Dotted arrows are self-correction loops back to `generate`.
+Red boxes are early exits.
+
+```mermaid
+flowchart TD
+  U([User request]) --> N1["<b>① detect_intent</b><br/>• Unicode-normalise text<br/>• Code checks: injection + destructive requests<br/>• Then LLM intent classifier"]
+  N1 --> N2{{"<b>② scope_validation</b><br/>gate into the SQL pipeline"}}
+  N2 -- "out-of-scope / destructive / injection" --> R["<b>refuse</b><br/>polite refusal"]
+  N2 -- "no SQL pasted / vague" --> Q["<b>clarify</b><br/>asks for details"]
+  N2 -- "conceptual question" --> H["<b>answer_help</b><br/>explains SQL / DB concepts"]
+  N2 -- "in scope" --> N3["<b>③ load_schema</b><br/>• Tables, columns, PKs, FKs, row counts<br/>• Enum values and date ranges from live DB<br/>• Validator report on pasted SQL"]
+  N3 --> N4["<b>④ generate</b> (LLM)<br/>• 4 modes: generate / explain / optimize / debug<br/>• Gets schema, date, dialect, last 6 messages, previous SQL<br/>• Retries get the failed SQL + exact error"]
+  N4 --> N5{{"<b>⑤ validate</b> (sqlglot)<br/>• SELECT / UNION / CTE only, one statement<br/>• Unknown tables / columns rejected<br/>• Every join must follow a foreign key"}}
+  N5 -. "errors: retry up to 3" .-> N4
+  N5 -- "not read-only" --> R
+  N5 -- valid --> N6["<b>⑥ analyze</b><br/>• EXPLAIN QUERY PLAN cost: low / medium / high<br/>• Index advice + lint tips<br/>• Optimize mode: compares rows of original vs rewrite"]
+  N6 -. "rewrite differs" .-> N4
+  N6 --> N7["<b>⑦ execute</b> (read-only)<br/>• mode=ro, query_only, 100-row cap, 5 s timeout<br/>• PostgreSQL / MySQL transpiled to SQLite preview"]
+  N7 -. "runtime error" .-> N4
+  N7 --> N8["<b>⑧ explain → respond</b><br/>• Plain-English summary, streamed<br/>• Saves response + last_sql in MemorySaver"]
+  R --> E([END])
+  Q --> E
+  H --> E
+  N8 --> E
+
+  classDef step fill:#f2f0ff,stroke:#6c5ce7,stroke-width:2px,color:#222;
+  classDef gate fill:#fff4d6,stroke:#e0a100,stroke-width:2px,color:#222;
+  classDef exit fill:#fdeaea,stroke:#c62828,stroke-width:2px,color:#222;
+  class N1,N3,N4,N6,N7,N8 step;
+  class N2,N5 gate;
+  class R,Q,H exit;
+```
+
+**Memory:** `MemorySaver` keyed by `thread_id`. If the server restarts or the free tier sleeps, the browser replays its last
+turns and any replayed SQL is re-validated before it is trusted.
+
+**Guardrails:** input checks → LLM scope classifier → tagged prompts → AST validator → output checks → read-only database →
+API limits (input length, `thread_id` format, per-IP rate limit).
 ## Features
 
 | Requirement | Where |
