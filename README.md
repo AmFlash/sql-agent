@@ -54,7 +54,7 @@ auto-generated copy of the raw graph lives in [`docs/workflow.mmd`](docs/workflo
 from the code).
 
 ```mermaid
-flowchart LR
+flowchart TD
   U(["User"]) --> B{"<b>1 · Intent Classifier</b><br/><i>detect_intent</i><br/>NFKC normalise<br/>destructive check (SQL + English)<br/>prompt-injection check<br/>LLM: generate · explain · optimize<br/>debug · sql_help · out_of_scope"}
   B -- "Yes" --> C["<b>2 · Scope Gate</b><br/><i>scope_validation</i><br/>routes the request into<br/>the SQL pipeline<br/>or to a side exit"]
   C -- "SQL task" --> D["<b>3 · Schema Retriever</b><br/><i>load_schema</i><br/>tables · columns · PK / FK<br/>row counts · enum values · date ranges<br/>validator report on pasted SQL<br/>broken SQL is switched to debug"]
